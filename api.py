@@ -18,7 +18,6 @@ class ImageRequest(BaseModel):
 
 # Define the structure of the JSON response body
 class ImageResponse(BaseModel):
-    enhanced_prompt: str
     image_url: str
 
 @app.get("/")
@@ -119,7 +118,6 @@ def generate_image(
         image_url = imgbb_data["data"]["url"]
         
         return ImageResponse(
-            enhanced_prompt=enhanced_prompt,
             image_url=image_url
         )
 
