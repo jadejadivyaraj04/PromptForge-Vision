@@ -17,6 +17,7 @@ app = FastAPI(
 class ImageRequest(BaseModel):
     title: str
     description: str
+    add_text_overlay: bool = False
 
 # Define the structure of the JSON response body
 class ImageResponse(BaseModel):
@@ -101,51 +102,52 @@ def generate_image(
              raise HTTPException(status_code=500, detail="The model did not return an image data.")
         
         # === NEW STEP: STAMP TEXT OVER IMAGE ===
-        try:
-            # 1. Load image and prepare for drawing a transparent overlay
-            img = Image.open(io.BytesIO(image_data)).convert("RGBA")
-            width, height = img.size
-            
-            overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
-            draw = ImageDraw.Draw(overlay)
-            
-            # 2. Draw a dark semi-transparent banner at the bottom 20%
-            banner_height = int(height * 0.2)
-            banner_top = height - banner_height
-            draw.rectangle(
-                [(0, banner_top), (width, height)],
-                fill=(0, 0, 0, 200) # Dark gradient/banner
-            )
-            
-            # Combine the overlay
-            img = Image.alpha_composite(img, overlay)
-            draw_text = ImageDraw.Draw(img)
-            
-            # 3. Load Fonts (Dynamic sizing based on image resolution)
+        if request.add_text_overlay:
             try:
-                title_font = ImageFont.load_default(size=int(height * 0.05))
-                desc_font = ImageFont.load_default(size=int(height * 0.035))
-            except TypeError:
-                title_font = ImageFont.load_default()
-                desc_font = title_font
+                # 1. Load image and prepare for drawing a transparent overlay
+                img = Image.open(io.BytesIO(image_data)).convert("RGBA")
+                width, height = img.size
                 
-            # 4. Draw the text inside the banner
-            pad_x = int(width * 0.04)
-            pad_y = int(height * 0.03)
-            
-            # Draw Title (White)
-            draw_text.text((pad_x, banner_top + pad_y), request.title, font=title_font, fill=(255, 255, 255, 255))
-            
-            # Draw Description (Light Gray) just beneath the title
-            draw_text.text((pad_x, banner_top + pad_y + int(height * 0.07)), request.description[:100] + ("..." if len(request.description) > 100 else ""), font=desc_font, fill=(200, 200, 200, 255))
-            
-            # 5. Extract finalized image byte data
-            final_image_data = io.BytesIO()
-            img.convert("RGB").save(final_image_data, format="PNG")
-            image_data = final_image_data.getvalue()
-        except Exception as e:
-            print(f"Non-fatal error during text stamping: {e}")
-            pass # Fails gracefully, proceeds with unstamped image
+                overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+                draw = ImageDraw.Draw(overlay)
+                
+                # 2. Draw a dark semi-transparent banner at the bottom 20%
+                banner_height = int(height * 0.2)
+                banner_top = height - banner_height
+                draw.rectangle(
+                    [(0, banner_top), (width, height)],
+                    fill=(0, 0, 0, 200) # Dark gradient/banner
+                )
+                
+                # Combine the overlay
+                img = Image.alpha_composite(img, overlay)
+                draw_text = ImageDraw.Draw(img)
+                
+                # 3. Load Fonts (Dynamic sizing based on image resolution)
+                try:
+                    title_font = ImageFont.load_default(size=int(height * 0.05))
+                    desc_font = ImageFont.load_default(size=int(height * 0.035))
+                except TypeError:
+                    title_font = ImageFont.load_default()
+                    desc_font = title_font
+                    
+                # 4. Draw the text inside the banner
+                pad_x = int(width * 0.04)
+                pad_y = int(height * 0.03)
+                
+                # Draw Title (White)
+                draw_text.text((pad_x, banner_top + pad_y), request.title, font=title_font, fill=(255, 255, 255, 255))
+                
+                # Draw Description (Light Gray) just beneath the title
+                draw_text.text((pad_x, banner_top + pad_y + int(height * 0.07)), request.description[:100] + ("..." if len(request.description) > 100 else ""), font=desc_font, fill=(200, 200, 200, 255))
+                
+                # 5. Extract finalized image byte data
+                final_image_data = io.BytesIO()
+                img.convert("RGB").save(final_image_data, format="PNG")
+                image_data = final_image_data.getvalue()
+            except Exception as e:
+                print(f"Non-fatal error during text stamping: {e}")
+                pass # Fails gracefully, proceeds with unstamped image
         
         # Convert binary image data to base64 string so it can be uploaded
         image_b64 = base64.b64encode(image_data).decode("utf-8")
