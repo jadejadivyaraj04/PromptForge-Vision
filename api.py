@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from google import genai
 from google.genai import types
 import base64
+import requests
 
 # Create the FastAPI application
 app = FastAPI(
@@ -18,7 +19,7 @@ class ImageRequest(BaseModel):
 # Define the structure of the JSON response body
 class ImageResponse(BaseModel):
     enhanced_prompt: str
-    image_base64: str
+    image_url: str
 
 @app.get("/")
 def read_root():
@@ -27,7 +28,8 @@ def read_root():
 @app.post("/generate", response_model=ImageResponse)
 def generate_image(
     request: ImageRequest,
-    x_gemini_api_key: str = Header(..., description="Pass your Gemini API Key in this header")
+    x_gemini_api_key: str = Header(..., description="Pass your Gemini API Key in this header"),
+    x_imgbb_api_key: str = Header(..., description="Pass your ImgBB API Key in this header")
 ):
     """
     Accepts a title and description, enhances the prompt via Gemini 1.5 Flash, 
@@ -97,12 +99,28 @@ def generate_image(
         if not image_data:
              raise HTTPException(status_code=500, detail="The model did not return an image data.")
         
-        # Convert binary image data to base64 string so it can be returned via JSON
+        # Convert binary image data to base64 string so it can be uploaded
         image_b64 = base64.b64encode(image_data).decode("utf-8")
+        
+        # === STEP 3: UPLOAD TO IMGBB ===
+        imgbb_response = requests.post(
+            "https://api.imgbb.com/1/upload",
+            data={
+                "key": x_imgbb_api_key,
+                "image": image_b64,
+            }
+        )
+        
+        imgbb_data = imgbb_response.json()
+        if not imgbb_data.get("success"):
+            error_msg = imgbb_data.get("error", {}).get("message", "Unknown Upload Error")
+            raise HTTPException(status_code=500, detail=f"ImgBB Upload Failed: {error_msg}")
+            
+        image_url = imgbb_data["data"]["url"]
         
         return ImageResponse(
             enhanced_prompt=enhanced_prompt,
-            image_base64=image_b64
+            image_url=image_url
         )
 
     except Exception as e:
