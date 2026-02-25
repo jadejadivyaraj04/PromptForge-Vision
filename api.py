@@ -4,8 +4,6 @@ from google import genai
 from google.genai import types
 import base64
 import requests
-import io
-from PIL import Image, ImageDraw, ImageFont
 
 # Create the FastAPI application
 app = FastAPI(
