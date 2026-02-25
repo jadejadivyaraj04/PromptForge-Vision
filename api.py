@@ -42,11 +42,15 @@ def generate_image(
         client = genai.Client(api_key=x_gemini_api_key)
         
         # === STEP 1: ENHANCE PROMPT WITH GEMINI TEXT MODEL ===
+        typography_instruction = ""
+        if request.add_text_overlay:
+            typography_instruction = f"\n\nCRITICAL: Explicitly instruct the image generator to integrate beautiful, professional typography directly into the visual composition (like a high-end Canva banner, magazine cover, or cinematic poster). The text must perfectly spell out '{request.title}' in a stunning font that matches the scene's aesthetic. Describe exactly where the text is placed and what it looks like."
+            
         enhancement_instructions = f"""
         You are an expert AI Image Prompt Engineer. 
         Take the user's main subject and details and write a single highly detailed, 
         professional image generation prompt. Add deep descriptions of the lighting, 
-        camera angle, mood, atmosphere, and artistic style. 
+        camera angle, mood, atmosphere, and artistic style. {typography_instruction}
         
         Make it sound like a cinematic masterpiece or brilliant conceptual artwork.
         Do NOT include introductory or concluding text, JUST output the enhanced image prompt.
@@ -100,54 +104,6 @@ def generate_image(
                     
         if not image_data:
              raise HTTPException(status_code=500, detail="The model did not return an image data.")
-        
-        # === NEW STEP: STAMP TEXT OVER IMAGE ===
-        if request.add_text_overlay:
-            try:
-                # 1. Load image and prepare for drawing a transparent overlay
-                img = Image.open(io.BytesIO(image_data)).convert("RGBA")
-                width, height = img.size
-                
-                overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
-                draw = ImageDraw.Draw(overlay)
-                
-                # 2. Draw a dark semi-transparent banner at the bottom 20%
-                banner_height = int(height * 0.2)
-                banner_top = height - banner_height
-                draw.rectangle(
-                    [(0, banner_top), (width, height)],
-                    fill=(0, 0, 0, 200) # Dark gradient/banner
-                )
-                
-                # Combine the overlay
-                img = Image.alpha_composite(img, overlay)
-                draw_text = ImageDraw.Draw(img)
-                
-                # 3. Load Fonts (Dynamic sizing based on image resolution)
-                try:
-                    title_font = ImageFont.load_default(size=int(height * 0.05))
-                    desc_font = ImageFont.load_default(size=int(height * 0.035))
-                except TypeError:
-                    title_font = ImageFont.load_default()
-                    desc_font = title_font
-                    
-                # 4. Draw the text inside the banner
-                pad_x = int(width * 0.04)
-                pad_y = int(height * 0.03)
-                
-                # Draw Title (White)
-                draw_text.text((pad_x, banner_top + pad_y), request.title, font=title_font, fill=(255, 255, 255, 255))
-                
-                # Draw Description (Light Gray) just beneath the title
-                draw_text.text((pad_x, banner_top + pad_y + int(height * 0.07)), request.description[:100] + ("..." if len(request.description) > 100 else ""), font=desc_font, fill=(200, 200, 200, 255))
-                
-                # 5. Extract finalized image byte data
-                final_image_data = io.BytesIO()
-                img.convert("RGB").save(final_image_data, format="PNG")
-                image_data = final_image_data.getvalue()
-            except Exception as e:
-                print(f"Non-fatal error during text stamping: {e}")
-                pass # Fails gracefully, proceeds with unstamped image
         
         # Convert binary image data to base64 string so it can be uploaded
         image_b64 = base64.b64encode(image_data).decode("utf-8")
