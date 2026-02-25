@@ -4,11 +4,40 @@ from google import genai
 from google.genai import types
 import base64
 import requests
+import threading
+import time
+from contextlib import asynccontextmanager
+
+# --- BACKGROUND TASK TO PREVENT RENDER FROM SLEEPING ---
+def keep_awake():
+    """Background task to ping the server every 13 minutes to stop Render sleeping cycle."""
+    url = "https://promptforge-vision.onrender.com/"
+    while True:
+        try:
+            # Sleep for 13 minutes (780 seconds)
+            time.sleep(780)
+            print(f"Pinging {url} to keep server awake...")
+            # We add a tiny timeout so our background thread doesn't hang
+            requests.get(url, timeout=10)
+            print("Ping successful!")
+        except Exception as e:
+            print(f"Self-ping failed: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # This runs when the server starts
+    print("Starting background keep-awake thread...")
+    thread = threading.Thread(target=keep_awake, daemon=True)
+    thread.start()
+    yield # Server runs here
+    # This runs when server closes
+    print("Shutting down...")
 
 # Create the FastAPI application
 app = FastAPI(
     title="Gemini Image Gen API",
-    description="API for enhancing prompts and generating images via Google Gemini 3 Pro."
+    description="API for enhancing prompts and generating images via Google Gemini 3 Pro.",
+    lifespan=lifespan
 )
 
 # Define the structure of the JSON request body
