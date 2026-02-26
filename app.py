@@ -17,12 +17,13 @@ st.markdown("Easily generate images using the **gemini-3-pro-image-preview** mod
 col1, col2 = st.columns([1, 2])
 with col1:
     image_title = st.text_input("Main Subject (Title):", placeholder="e.g. A flying car")
+    enhance_prompt = st.checkbox("✨ Enhance prompt with AI", value=True, help="Disable this for faster generation")
 with col2:
     image_description = st.text_area("Details & Settings (Description):", placeholder="e.g. Night time, neon cyberpunk city, rain reflecting on metal", height=100)
 
 if st.button("✨ Generate Image", type="primary", use_container_width=True):
-    if not image_title.strip() or not image_description.strip():
-        st.warning("⚠️ Please provide both a Main Subject and Details.")
+    if not image_title.strip():
+        st.warning("⚠️ Please provide a Main Subject.")
     else:
         with st.spinner("⏳ Compiling your prompt & creating magic (this may take a few seconds)..."):
             try:
@@ -30,29 +31,33 @@ if st.button("✨ Generate Image", type="primary", use_container_width=True):
                 client = genai.Client()
                 
                 # --- STEP 1: ENHANCE THE PROMPT FOR FREE ---
-                st.info("🤖 AI is enhancing your prompt and adding details...")
-                
-                enhancement_instructions = f"""
-                You are an expert AI Image Prompt Engineer. 
-                Take the user's main subject and details and write a single highly detailed, 
-                professional image generation prompt. Add deep descriptions of the lighting, 
-                camera angle, mood, atmosphere, and artistic style. 
-                
-                Make it sound like a cinematic masterpiece or brilliant conceptual artwork.
-                Do NOT include introductory or concluding text, JUST output the enhanced image prompt.
-                
-                Main Subject: '{image_title}'
-                Details & Setting: '{image_description}'
-                """
-                
-                # We use the free-tier, hyper-fast text model for this
-                text_response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=enhancement_instructions,
-                )
-                
-                enhanced_prompt = text_response.text.strip()
-                st.success(f"**✨ Enhanced Prompt generated:**\n\n_{enhanced_prompt}_")
+                if enhance_prompt:
+                    st.info("🤖 AI is enhancing your prompt and adding details...")
+                    
+                    enhancement_instructions = f"""
+                    You are an expert AI Image Prompt Engineer. 
+                    Take the user's main subject and details and write a single highly detailed, 
+                    professional image generation prompt. Add deep descriptions of the lighting, 
+                    camera angle, mood, atmosphere, and artistic style. 
+                    
+                    Make it sound like a cinematic masterpiece or brilliant conceptual artwork.
+                    Do NOT include introductory or concluding text, JUST output the enhanced image prompt.
+                    
+                    Main Subject: '{image_title}'
+                    Details & Setting: '{image_description}'
+                    """
+                    
+                    # We use the free-tier, hyper-fast text model for this
+                    text_response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=enhancement_instructions,
+                    )
+                    
+                    enhanced_prompt = text_response.text.strip()
+                    st.success(f"**✨ Enhanced Prompt generated:**\n\n_{enhanced_prompt}_")
+                else:
+                    enhanced_prompt = f"{image_title}. {image_description}"
+                    st.info("⚡ Skipping prompt enhancement for faster generation...")
                 
                 # --- STEP 2: GENERATE THE IMAGE ---
                 st.info("🎨 Now painting the image...")
@@ -77,21 +82,19 @@ if st.button("✨ Generate Image", type="primary", use_container_width=True):
                     response_modalities=["IMAGE"],
                 )
 
-                response_stream = client.models.generate_content_stream(
+                # Native generate content rather than streaming for images
+                response = client.models.generate_content(
                     model=model,
                     contents=contents,
                     config=generate_content_config,
                 )
                 
                 image_found = False
-                for chunk in response_stream:
-                    if chunk.parts is None:
-                        continue
-                        
-                    for part in chunk.parts:
+                if response.candidates:
+                    for part in response.candidates[0].content.parts:
                         if part.inline_data and part.inline_data.data:
                             image_found = True
-                            st.success("✅ Image generated successfully!")
+                            st.success("✅ Image generated successfully! ⚡")
                             st.image(part.inline_data.data, caption=f"Prompt: {image_title}", use_container_width=True)
                             
                             # Provide a download button
@@ -102,6 +105,7 @@ if st.button("✨ Generate Image", type="primary", use_container_width=True):
                                 mime="image/png",
                                 use_container_width=True
                             )
+                            break
                         elif part.text:
                             # It might generate a text response along with or instead of an image
                             if part.text.strip():
